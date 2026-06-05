@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+test_report.html
+batch_storingwines_report.html
+.vscode/
+.idea/
+*.egg-info/
+dist/
+build/
