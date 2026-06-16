@@ -1,6 +1,6 @@
 """
-收银3.0收银台 - YAML 数据驱动测试框架
-├── test_data.yaml  ← 📋 用例数据
+收银3.0收银台 - YAML 数据驱动测试框架（Allure 报告）
+├── test_data/      ← 📋 用例数据（多模块 YAML）
 ├── test_runner.py  ← 🚀 测试执行器
 └── utils/          ← 🔧 工具模块
     ├── reader       - 读取 YAML 用例
@@ -16,6 +16,7 @@ import logging
 import time
 from datetime import datetime, timedelta
 
+import allure
 import pytest
 
 logging.basicConfig(
@@ -32,8 +33,6 @@ from utils.send_request import send_http_request, send_http_request_raw
 from utils.handlers import (
     WS_SPECIALS, WS_HANDLERS, HANDLER_PRE, HANDLER_SETTLE, HANDLER_POST,
 )
-from utils.result_collector import ResultCollector, TestResult
-
 # 读取测试用例（模块级，确保 IDE 测试发现能解析）
 _test_cases = read_cases()
 
@@ -42,7 +41,7 @@ _test_cases = read_cases()
 # ══════════════════════════════════════════════════════════
 
 class TestRunner:
-    """Excel 驱动测试运行器：读 Excel → 渲染 → 发送 → 断言 → 提取"""
+    """YAML 驱动测试运行器：读 YAML → 渲染 → 发送 → 断言 → Allure 报告"""
 
     # 全局上下文（可变，跨用例共享动态提取值如 order_id / storing_wine_id）
     today = datetime.now().strftime("%Y-%m-%d")
@@ -73,6 +72,16 @@ class TestRunner:
         case_story = case.get("story", "")
         t_start = time.time()
 
+        # ── Allure 动态注解（parametrize 下必须用 dynamic）──
+        allure.dynamic.id(case_id)
+        allure.dynamic.feature(case_feature)
+        allure.dynamic.story(case_story)
+        allure.dynamic.title(case_title)
+        allure.dynamic.severity(allure.severity_level.NORMAL)
+        allure.dynamic.tag(case_feature)
+        allure.dynamic.tag(case_story)
+        allure.dynamic.description(f"接口: {case.get('method', '?')} {case.get('path', '?')}")
+
         # 引用全局上下文（用于跨用例共享动态提取值如 order_id）
         all_dict = TestRunner.context
         # 注入 ws_token 供 WebSocket 处理使用
@@ -90,7 +99,8 @@ class TestRunner:
         )
 
         # ══ 步骤 2: Jinja2 渲染 + 解析请求数据 ══
-        request_data = analyse_case(case, all_dict)
+        with allure.step(f"解析用例: {case_title}"):
+            request_data = analyse_case(case, all_dict)
 
         special = request_data.get("special", "")
         req_method = request_data.get("method", "")
@@ -106,14 +116,23 @@ class TestRunner:
             "body": dict(req_body) if isinstance(req_body, dict) else req_body,
         }
 
+        # ── Allure 附加请求体 ──
+        allure.attach(
+            json.dumps(req_snapshot, ensure_ascii=False, indent=2),
+            name=f"请求: {req_method} {req_url}",
+            attachment_type=allure.attachment_type.JSON,
+        )
+
         res = None
         ws_close = None
         try:
             # ══ 步骤 3: 特殊动作 — 请求前 ══
             if special in WS_SPECIALS:
-                ws_close = WS_HANDLERS[special](client, case, all_dict)
+                with allure.step(f"WebSocket: {special}"):
+                    ws_close = WS_HANDLERS[special](client, case, all_dict)
             elif special in HANDLER_PRE:
-                HANDLER_PRE[special](client, case, all_dict)
+                with allure.step(f"前置处理: {special}"):
+                    HANDLER_PRE[special](client, case, all_dict)
 
             # ══ 步骤 4: 合并特殊参数 ══
             if special in HANDLER_SETTLE:
@@ -122,45 +141,46 @@ class TestRunner:
                 req_snapshot["body"] = dict(request_data["data"])
 
             # ══ 步骤 5: 发送 HTTP 请求 ══
-            if fixture_type == "none":
-                res = send_http_request_raw(
-                    method=req_method,
-                    url=req_url,
-                    data=request_data["data"],
-                    sign=request_data.get("sign", True),
-                )
-            else:
-                res = send_http_request(client, **request_data)
+            with allure.step(f"发送请求: {req_method} {req_url}"):
+                if fixture_type == "none":
+                    res = send_http_request_raw(
+                        method=req_method,
+                        url=req_url,
+                        data=request_data["data"],
+                        sign=request_data.get("sign", True),
+                    )
+                else:
+                    res = send_http_request(client, **request_data)
 
             logging.info(f"  ← {json.dumps(res, ensure_ascii=False)[:200]}")
+
+            # ── Allure 附加响应体 ──
+            allure.attach(
+                json.dumps(res, ensure_ascii=False, indent=2),
+                name="响应体",
+                attachment_type=allure.attachment_type.JSON,
+            )
 
             # ══ 步骤 6: WebSocket 收尾 ══
             if ws_close:
                 ws_close()
 
             # ══ 步骤 7: JSON 提取 ══
-            json_extractor(case, all_dict, res)
+            with allure.step("提取响应字段"):
+                json_extractor(case, all_dict, res)
 
             # ══ 步骤 8: 特殊动作 — 请求后 ══
             if special in HANDLER_POST:
-                HANDLER_POST[special](client, case, all_dict, res)
+                with allure.step(f"后置处理: {special}"):
+                    HANDLER_POST[special](client, case, all_dict, res)
 
             # ══ 步骤 9: 断言 ══
-            http_assert(case, res)
-            jdbc_assert(case)
+            with allure.step("断言校验"):
+                http_assert(case, res)
+                jdbc_assert(case)
 
             # ✅ 通过
             elapsed = time.time() - t_start
-            ResultCollector.add(TestResult(
-                case_id=case_id,
-                title=case_title,
-                feature=case_feature,
-                story=case_story,
-                method=req_method,
-                path=req_url,
-                status="PASS",
-                duration=round(elapsed, 3),
-            ))
             logging.info(f"  ✅ [{case_id}] 通过 ({elapsed:.2f}s)")
 
         except Exception as e:
@@ -168,23 +188,6 @@ class TestRunner:
             error_text = str(e)
 
             logging.error(f"  ❌ [{case_id}] 失败 ({elapsed:.2f}s): {error_text}")
-
-            # 记录失败详情
-            ResultCollector.add(TestResult(
-                case_id=case_id,
-                title=case_title,
-                feature=case_feature,
-                story=case_story,
-                method=req_method,
-                path=req_url,
-                status="FAIL",
-                duration=round(elapsed, 3),
-                error_msg=error_text,
-                request_method=req_method,
-                request_url=req_url,
-                request_body=req_snapshot.get("body"),
-                response_body=res,
-            ))
 
             # 重新抛出，让 pytest 标记为失败
             raise

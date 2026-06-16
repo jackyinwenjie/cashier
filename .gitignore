@@ -3,6 +3,8 @@ __pycache__/
 *.pyo
 test_report.html
 batch_storingwines_report.html
+allure-results/
+allure-report/
 .vscode/
 .idea/
 *.egg-info/

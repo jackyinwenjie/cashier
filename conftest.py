@@ -11,8 +11,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from utils.result_collector import ResultCollector
-from utils.html_reporter import generate_html
 from utils.sign import SIGN_KEY, make_sign as sign, signed_body
 
 # ========== 全局配置 ==========
@@ -116,18 +114,99 @@ def api(client):
 
 
 # ═══════════════════════════════════════════
-#  Session 钩子：自动生成 HTML 测试报告
+#  Session 钩子：Allure 环境配置 + 报告提示
 # ═══════════════════════════════════════════
 
 def pytest_sessionstart(session):
-    """测试开始前重置收集器"""
-    ResultCollector.reset()
+    """测试开始前写入 Allure 环境配置 + 清理旧报告服务"""
+    import shutil
+    import subprocess
+    from datetime import datetime
+
+    allure_dir = os.path.join(os.path.dirname(__file__), "allure-results")
+    config_dir = os.path.join(os.path.dirname(__file__), "allure_config")
+
+    # 确保目录存在
+    os.makedirs(allure_dir, exist_ok=True)
+
+    # ── 0. 关闭旧的 Allure 服务（释放 18080 端口）──
+    try:
+        result = subprocess.run(
+            ["powershell", "-Command",
+             "$c = Get-NetTCPConnection -LocalPort 18080 -ErrorAction SilentlyContinue; "
+             "if ($c) { $c | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force } }"],
+            capture_output=True, timeout=10,
+        )
+    except Exception:
+        pass
+
+    # ── 1. 写入 environment.properties（中文转 Unicode 防止乱码）──
+    env_props = {
+        "项目名称": "收银3.0收银台",
+        "接口地址": BASE_URL,
+        "门店ID": os.getenv("SHOP_ID", "3226"),
+        "包厢ID": os.getenv("BOX_ID", "64291"),
+        "测试框架": "pytest + allure-pytest",
+        "Python版本": "3.10",
+        "报告时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "用例来源": "test_data/ (YAML 多模块)",
+        "认证方式": "收银员Token自动验签",
+    }
+    env_path = os.path.join(allure_dir, "environment.properties")
+    with open(env_path, "w", encoding="utf-8") as f:
+        for k, v in env_props.items():
+            k_asc = k.encode("ascii", "backslashreplace").decode("ascii")
+            v_asc = v.encode("ascii", "backslashreplace").decode("ascii")
+            f.write(f"{k_asc}={v_asc}\n")
+
+    # ── 2. 拷贝 categories.json ──
+    cat_src = os.path.join(config_dir, "categories.json")
+    cat_dst = os.path.join(allure_dir, "categories.json")
+    if os.path.isfile(cat_src):
+        shutil.copy(cat_src, cat_dst)
 
 
 def pytest_sessionfinish(session, exitstatus):
-    """测试结束后自动生成 HTML 报告"""
-    report_path = generate_html()
-    print(f"\n[报告] 测试报告已生成: {report_path}")
-    summary = ResultCollector.get_summary()
-    print(f"[报告] 总计: {summary['total']} | 通过: {summary['passed']} | "
-          f"失败: {summary['failed']} | 通过率: {summary['pass_rate']}")
+    """测试结束后自动打开 Allure 报告（内置 HTTP 服务）"""
+    import subprocess
+    from pathlib import Path
+
+    project_dir = Path(__file__).parent
+    allure_results = project_dir / "allure-results"
+
+    if not allure_results.is_dir():
+        return
+
+    # ── 定位 allure 可执行路径 ──
+    allure_exe = None
+    for candidate in [
+        Path(os.environ.get("USERPROFILE", "")) / "tools" / "allure" / "allure-2.30.0" / "bin" / "allure.bat",
+    ]:
+        if candidate and candidate.is_file():
+            allure_exe = str(candidate)
+            break
+    if allure_exe is None:
+        allure_exe = "allure"
+
+    # ── 构造环境变量 ──
+    env = os.environ.copy()
+    for jdk_path in [
+        r"C:\Program Files\Java\jre1.8.0_77",
+        r"C:\Program Files\Java\jdk-17",
+    ]:
+        if os.path.isdir(jdk_path):
+            env["JAVA_HOME"] = jdk_path
+            break
+
+    # ── allure serve 一键生成 + HTTP 服务 + 浏览器打开 ──
+    try:
+        subprocess.Popen(
+            [allure_exe, "serve", "-p", "18080", str(allure_results)],
+            env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        print(f"\n[报告] Allure 报告已启动: http://192.168.6.197:18080/")
+        print(f"[报告] 每次运行后自动覆盖，浏览器打开上述地址即可查看")
+    except FileNotFoundError:
+        print("\n[报告] 未找到 allure 命令，请确认已安装 Allure 命令行工具")
+    except Exception as e:
+        print(f"\n[报告] 报告启动异常: {e}")

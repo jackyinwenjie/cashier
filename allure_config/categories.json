@@ -1,0 +1,37 @@
+[
+    {
+        "name": "🔥 已知问题 — 业务错误",
+        "matchedStatuses": ["failed"],
+        "messageRegex": ".*期望.*实际.*",
+        "traceRegex": ".*AssertionError.*"
+    },
+    {
+        "name": "🐞 已知问题 — 依赖缺失",
+        "matchedStatuses": ["failed"],
+        "messageRegex": ".*KeyError:.*",
+        "traceRegex": ".*KeyError.*"
+    },
+    {
+        "name": "⚡ 系统错误 — 网络/超时",
+        "matchedStatuses": ["failed"],
+        "messageRegex": ".*timeout.*|.*ConnectionError.*|.*Connection refused.*"
+    },
+    {
+        "name": "🔧 系统错误 — 服务异常",
+        "matchedStatuses": ["failed"],
+        "traceRegex": ".*5\\d\\d.*|.*Server Error.*"
+    },
+    {
+        "name": "📡 断言失败",
+        "matchedStatuses": ["failed"],
+        "messageRegex": ".*期望.*|.*AssertionError.*"
+    },
+    {
+        "name": "⚠️ 其他失败",
+        "matchedStatuses": ["failed"]
+    },
+    {
+        "name": "❌ 已跳过",
+        "matchedStatuses": ["skipped"]
+    }
+]
