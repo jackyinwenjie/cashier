@@ -1,484 +1,537 @@
+# ============================================================
+# 收银3.0收银台 — 接口自动化测试用例数据
+# ============================================================
+# 结构说明:
+#   feature / story  — 业务模块分组
+#   tests[]          — 用例列表, 每条含:
+#     id       — 唯一标识, 用于结果报告
+#     title    — 用例描述
+#     method   — HTTP 方法 (GET/POST)
+#     path     — 接口路径
+#     data     — 请求参数, 支持 Jinja2 变量 {{ VAR }}
+#     assert   — 断言规则 (code/msg/字段存在性等)
+#     extract  — 提取响应字段到全局上下文, 供后续用例引用
+#     special  — 特殊处理标记 (WebSocket/动态参数/后处理)
+#     sign     — 是否自动签名 (默认 true)
+#
+# 全局变量 (定义在 test_runner.py context):
+#   {{ BASE_URL }}      {{ SHOP_ID }}         {{ BOX_ID }}
+#   {{ BOX_ID_NEW }}    {{ STORING_BOX_ID }}   {{ RESERVE_BOX_ID }}
+#   {{ VIP_ID }}        {{ GIVE_USER_ID }}     {{ USER_PHONE }}
+#   {{ TODAY }}         {{ TOMORROW }}
+#
+# 跨用例动态变量 (由前一个用例 extract 产生):
+#   {{ order_id }}      {{ storing_wine_id }}  {{ reserve_id }}
+# ============================================================
+
+# ═══════════════════════════════════════════
+# 1. 基础数据
+# ═══════════════════════════════════════════
 - feature: 基础数据
   story: 基础数据
   tests:
-  - id: userdata
-    title: '[用户-正向] 获取收银员信息'
-    method: GET
-    path: /shop/userdata
-    data:
-      shop_id: '{{ SHOP_ID }}'
-    assert:
-      code: 1
-      data.id: exists
-      data.name: exists
-      data.account: exists
-      data.cashier_version: exists
-    extract: {}
-    sign: true
-  - id: shop_datalist
-    title: '[店铺-正向] 获取店铺数据列表'
-    method: GET
-    path: /shop/shop/datalist
-    data:
-      shop_id: '3226'
-    assert:
-      code: 1
-    extract: {}
-    sign: true
+
+    - id: userdata
+      title: '[用户-正向] 获取收银员信息'
+      method: GET
+      path: /shop/userdata
+      data:
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        data.id: exists
+        data.name: exists
+        data.account: exists
+        data.cashier_version: exists
+
+    - id: shop_datalist
+      title: '[店铺-正向] 获取店铺数据列表'
+      method: GET
+      path: /shop/shop/datalist
+      data:
+        shop_id: '3226'
+      assert:
+        code: 1
+
+# ═══════════════════════════════════════════
+# 2. 收银流程 (开台 → 点单 → 退品 → 赠送 → 结算 → 关房)
+# ═══════════════════════════════════════════
 - feature: 收银流程
   story: 收银流程
   tests:
-  - id: open_table
-    title: '[开台-正向] 开台'
-    method: POST
-    path: /cashier/order/store
-    data:
-      box_id: '{{ BOX_ID }}'
-      billing_type: '20'
-      goods_pricing_schemes_id: '7'
-      box_pricing_schemes_id: '21'
-      purchase_time: '480'
-      shop_user_sales_id: ''
-      shop_user_waiter_id: ''
-      user_vip_id: ''
-      sales_name: ''
-      shop_id: '{{ SHOP_ID }}'
-    assert:
-      code: 1
-      msg: 成功
-    extract: {}
-    special: websocket_open_table
-    sign: true
-  - id: add_goods
-    title: '[点单-正向] 点单'
-    method: POST
-    path: /cashier/goodsorders/store
-    data:
-      box_id: '{{ BOX_ID }}'
-      shop_user_sales_id: ''
-      goods_array:
-      - goods_id: 15
-        goods_name: 国宾啤酒
-        num: 2
-        unit_name: 瓶
-        unit_id: 38
-        type: 1
-      - goods_id: 16
-        goods_name: 可乐
-        num: 2
-        unit_name: 听
-        unit_id: 47
-        type: 1
-      desc: ''
-      shop_id: '{{ SHOP_ID }}'
-    assert:
-      code: 1
-      msg: 成功
-    extract: {}
-    special: add_goods_extract
-    sign: true
-  - id: goods_refund
-    title: '[退品-正向] 退品'
-    method: POST
-    path: /cashier/order/goods_refund_save
-    data:
-      order_id: '{{ order_id }}'
-      shop_id: '{{ SHOP_ID }}'
-    assert:
-      code: 1
-      msg: 成功
-    extract: {}
-    special: goods_refund_param
-    sign: true
-  - id: give_order
-    title: '[赠送-正向] 赠送商品'
-    method: POST
-    path: /cashier/goodsorders/store
-    data:
-      box_id: '{{ BOX_ID }}'
-      give_id: '{{ GIVE_USER_ID }}'
-      goods_array:
-      - goods_id: 15
-        goods_name: 国宾啤酒
-        num: 1
-        unit_name: 瓶
-        unit_id: 38
-        type: 1
-      send_remark: ''
-      shop_id: '{{ SHOP_ID }}'
-    assert:
-      code: 1
-      msg: 成功
-    extract: {}
-    sign: true
-  - id: good_settlement
-    title: '[付款-正向] 单品结算'
-    method: POST
-    path: /cashier/orderpayments/goodSettlement
-    data:
-      box_id: '{{ BOX_ID }}'
-      type: '0'
-      payRemark: ''
-      shop_id: '{{ SHOP_ID }}'
-    assert:
-      code: 1
-      msg: 成功
-    extract: {}
-    special: settlement_param
-    sign: true
-  - id: set_settlement
-    title: '[结账-正向] 整体结账'
-    method: POST
-    path: /cashier/orderpayments/setsettlement
-    data:
-      box_id: '{{ BOX_ID }}'
-      type: '1'
-      payRemark: ''
-      shop_id: '{{ SHOP_ID }}'
-    assert:
-      code: 1
-      msg: 成功
-    extract: {}
-    special: set_settlement_param
-    sign: true
-  - id: close_box
-    title: '[关房-正向] 关房'
-    method: POST
-    path: /cashier/order/editboxstatus
-    data:
-      box_status: '50'
-      box_id: '{{ BOX_ID }}'
-      shop_id: '{{ SHOP_ID }}'
-    assert:
-      code: 1
-      msg: 成功
-    extract: {}
-    sign: true
+
+    # ── 开台 ──
+    - id: open_table
+      title: '[开台-正向] 开台'
+      method: POST
+      path: /cashier/order/store
+      data:
+        box_id: '{{ BOX_ID }}'
+        billing_type: '20'
+        goods_pricing_schemes_id: '7'
+        box_pricing_schemes_id: '21'
+        purchase_time: '480'
+        shop_user_sales_id: ''
+        shop_user_waiter_id: ''
+        user_vip_id: ''
+        sales_name: ''
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        msg: 成功
+      special: websocket_open_table
+
+    # ── 点单 ──
+    - id: add_goods
+      title: '[点单-正向] 点单'
+      method: POST
+      path: /cashier/goodsorders/store
+      data:
+        box_id: '{{ BOX_ID }}'
+        shop_user_sales_id: ''
+        goods_array:
+          - goods_id: 15
+            goods_name: 国宾啤酒
+            num: 2
+            unit_name: 瓶
+            unit_id: 38
+            type: 1
+          - goods_id: 16
+            goods_name: 可乐
+            num: 2
+            unit_name: 听
+            unit_id: 47
+            type: 1
+        desc: ''
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        msg: 成功
+      special: add_goods_extract
+
+    # ── 退品 (依赖: order_id) ──
+    - id: goods_refund
+      title: '[退品-正向] 退品'
+      method: POST
+      path: /cashier/order/goods_refund_save
+      data:
+        order_id: '{{ order_id }}'
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        msg: 成功
+      special: goods_refund_param
+
+    # ── 赠送 ──
+    - id: give_order
+      title: '[赠送-正向] 赠送商品'
+      method: POST
+      path: /cashier/goodsorders/store
+      data:
+        box_id: '{{ BOX_ID }}'
+        give_id: '{{ GIVE_USER_ID }}'
+        goods_array:
+          - goods_id: 15
+            goods_name: 国宾啤酒
+            num: 1
+            unit_name: 瓶
+            unit_id: 38
+            type: 1
+        send_remark: ''
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        msg: 成功
+
+    # ── 单品结算 ──
+    - id: good_settlement
+      title: '[付款-正向] 单品结算'
+      method: POST
+      path: /cashier/orderpayments/goodSettlement
+      data:
+        box_id: '{{ BOX_ID }}'
+        type: '0'
+        payRemark: ''
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        msg: 成功
+      special: settlement_param
+
+    # ── 整体结账 ──
+    - id: set_settlement
+      title: '[结账-正向] 整体结账'
+      method: POST
+      path: /cashier/orderpayments/setsettlement
+      data:
+        box_id: '{{ BOX_ID }}'
+        type: '1'
+        payRemark: ''
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        msg: 成功
+      special: set_settlement_param
+
+    # ── 关房 ──
+    - id: close_box
+      title: '[关房-正向] 关房'
+      method: POST
+      path: /cashier/order/editboxstatus
+      data:
+        box_status: '50'
+        box_id: '{{ BOX_ID }}'
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        msg: 成功
+
+# ═══════════════════════════════════════════
+# 3. 寄存支取 (寄存 → 查询 → 支取)
+# ═══════════════════════════════════════════
 - feature: 寄存支取
   story: 寄存支取
   tests:
-  - id: store_wine
-    title: '[寄存-正向] 寄存酒水'
-    method: POST
-    path: /cashier/storingwines/store
-    data:
-      user_type: '1'
-      name: 自动化
-      phone: '{{ USER_PHONE }}'
-      day: '30'
-      remark: ''
-      shop_user_id: ''
-      client_user_id: ''
-      box_id: '{{ STORING_BOX_ID }}'
-      goods_array:
-      - goods_id: '16'
-        num: '2'
-        unit_id: '1'
-        unit_num: '0'
-      shop_id: '{{ SHOP_ID }}'
-    assert:
-      code: 1
-      data: not_null
-    extract:
-      storing_wine_id: data.storing_wine_id
-      deposit_data: data.deposit
-      deposit_goods_id: data.deposit.[0].goods_id
-      deposit_goods_num: data.deposit.[0].num
-    sign: true
-  - id: query_store_detail
-    title: '[查询寄存-正向] 查询寄存明细'
-    method: GET
-    path: /cashier/storingwines/index
-    data:
-      storing_wines_id: '{{ storing_wine_id }}'
-      shop_id: '{{ SHOP_ID }}'
-    assert:
-      code: 1
-    extract: {}
-    special: storing_query_extract
-    sign: true
-  - id: take_wine
-    title: '[支取-正向] 支取酒水'
-    method: POST
-    path: /cashier/storingwines/takewine
-    data:
-      storing_wines_id: '{{ storing_wine_id }}'
-      box_id: '{{ BOX_ID }}'
-      wine_shop_id: '{{ SHOP_ID }}'
-      takeWineBatch: '1'
-      remark: ''
-      is_custom: '2'
-      shop_id: '{{ SHOP_ID }}'
-    assert:
-      code: 1
-    extract: {}
-    special: take_wine_param
-    sign: true
+
+    # ── 寄存酒水 (产出: storing_wine_id) ──
+    - id: store_wine
+      title: '[寄存-正向] 寄存酒水'
+      method: POST
+      path: /cashier/storingwines/store
+      data:
+        user_type: '1'
+        name: 自动化
+        phone: '{{ USER_PHONE }}'
+        day: '30'
+        remark: ''
+        shop_user_id: ''
+        client_user_id: ''
+        box_id: '{{ STORING_BOX_ID }}'
+        goods_array:
+          - goods_id: '16'
+            num: '2'
+            unit_id: '1'
+            unit_num: '0'
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        data: not_null
+      extract:
+        storing_wine_id: data.storing_wine_id
+        deposit_data: data.deposit
+        deposit_goods_id: data.deposit.[0].goods_id
+        deposit_goods_num: data.deposit.[0].num
+
+    # ── 查询寄存明细 (依赖: storing_wine_id) ──
+    - id: query_store_detail
+      title: '[查询寄存-正向] 查询寄存明细'
+      method: GET
+      path: /cashier/storingwines/index
+      data:
+        storing_wines_id: '{{ storing_wine_id }}'
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+      special: storing_query_extract
+
+    # ── 支取酒水 (依赖: storing_wine_id) ──
+    - id: take_wine
+      title: '[支取-正向] 支取酒水'
+      method: POST
+      path: /cashier/storingwines/takewine
+      data:
+        storing_wines_id: '{{ storing_wine_id }}'
+        box_id: '{{ BOX_ID }}'
+        wine_shop_id: '{{ SHOP_ID }}'
+        takeWineBatch: '1'
+        remark: ''
+        is_custom: '2'
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+      special: take_wine_param
+
+# ═══════════════════════════════════════════
+# 4. 预订取消 (预订 → 查询 → 取消)
+# ═══════════════════════════════════════════
 - feature: 预订取消
   story: 预订取消
   tests:
-  - id: reserve
-    title: '[预订-正向] 预订包厢'
-    method: POST
-    path: /cashier/reserve/store
-    data:
-      box_id: '{{ RESERVE_BOX_ID }}'
-      name: 自动化预订
-      phone: '{{ USER_PHONE }}'
-      shop_user_id: '{{ GIVE_USER_ID }}'
-      sales_name: 自动化测试
-      sex: '1'
-      remark: ''
-      type: '1'
-      vod_theme_id: ''
-      shop_id: '{{ SHOP_ID }}'
-    assert:
-      code: 1
-      msg: 成功
-    extract: {}
-    special: reserve_param
-    sign: true
-  - id: query_reserve
-    title: '[查询预订-正向] 查询预订获取 ID'
-    method: GET
-    path: /cashier/reserve/index
-    data:
-      shop_id: '{{ SHOP_ID }}'
-    assert:
-      code: 1
-    extract: {}
-    special: reserve_query_extract
-    sign: true
-  - id: cancel_reserve
-    title: '[取消预订-正向] 取消预订'
-    method: POST
-    path: /cashier/reserve/del
-    data:
-      id: '{{ reserve_id }}'
-      shop_id: '{{ SHOP_ID }}'
-    assert:
-      code: 1
-      msg: 成功
-    extract: {}
-    sign: true
+
+    # ── 预订包厢 ──
+    - id: reserve
+      title: '[预订-正向] 预订包厢'
+      method: POST
+      path: /cashier/reserve/store
+      data:
+        box_id: '{{ RESERVE_BOX_ID }}'
+        name: 自动化预订
+        phone: '{{ USER_PHONE }}'
+        shop_user_id: '{{ GIVE_USER_ID }}'
+        sales_name: 自动化测试
+        sex: '1'
+        remark: ''
+        type: '1'
+        vod_theme_id: ''
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        msg: 成功
+      special: reserve_param
+
+    # ── 查询预订 (产出: reserve_id) ──
+    - id: query_reserve
+      title: '[查询预订-正向] 查询预订获取 ID'
+      method: GET
+      path: /cashier/reserve/index
+      data:
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+      special: reserve_query_extract
+
+    # ── 取消预订 (依赖: reserve_id) ──
+    - id: cancel_reserve
+      title: '[取消预订-正向] 取消预订'
+      method: POST
+      path: /cashier/reserve/del
+      data:
+        id: '{{ reserve_id }}'
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        msg: 成功
+
+# ═══════════════════════════════════════════
+# 5. 会员充值扣款
+# ═══════════════════════════════════════════
 - feature: 会员充值扣款
   story: 会员充值扣款
   tests:
-  - id: vip_recharge
-    title: '[充值-正向] 会员充值'
-    method: POST
-    path: /cashier/user/vip/recharge
-    data:
-      money: '1000'
-      id: '{{ VIP_ID }}'
-      type: '1'
-      gift: '1000'
-      pay_ways:
-      - id: '37'
+
+    - id: vip_recharge
+      title: '[充值-正向] 会员充值'
+      method: POST
+      path: /cashier/user/vip/recharge
+      data:
         money: '1000'
-        type: '3'
-        type_pay: '2'
-      php_shop_user_id: ''
-      shop_id: '{{ SHOP_ID }}'
-    assert:
-      code: 1
-    extract: {}
-    sign: true
-  - id: vip_deduction
-    title: '[扣款-正向] 会员扣款'
-    method: POST
-    path: /cashier/user/vip/deduction
-    data:
-      money: '1000'
-      gift: '1000'
-      remark: 自动化扣款
-      id: '{{ VIP_ID }}'
-      pay_ways:
-      - id: '37'
+        id: '{{ VIP_ID }}'
+        type: '1'
+        gift: '1000'
+        pay_ways:
+          - id: '37'
+            money: '1000'
+            type: '3'
+            type_pay: '2'
+        php_shop_user_id: ''
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+
+    - id: vip_deduction
+      title: '[扣款-正向] 会员扣款'
+      method: POST
+      path: /cashier/user/vip/deduction
+      data:
         money: '1000'
-        type: '3'
-        type_pay: '2'
-      shop_id: '{{ SHOP_ID }}'
-    assert:
-      code: 1
-      msg: 成功
-    extract: {}
-    sign: true
+        gift: '1000'
+        remark: 自动化扣款
+        id: '{{ VIP_ID }}'
+        pay_ways:
+          - id: '37'
+            money: '1000'
+            type: '3'
+            type_pay: '2'
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        msg: 成功
+
+# ═══════════════════════════════════════════
+# 6. 账单查询
+# ═══════════════════════════════════════════
 - feature: 账单查询
   story: 账单查询
   tests:
-  - id: query_order
-    title: '[查询-正向] 查询账单'
-    method: GET
-    path: /cashier/order
-    data:
-      search_no: ''
-      start_time: '{{TODAY}} 09:00:00'
-      end_time: '{{TOMORROW}} 09:00:00'
-      box_id: ''
-      page: '1'
-      limit: '10'
-      sort_type: '1'
-      shop_id: '{{SHOP_ID}}'
-      ipv4: ''
-      ip: 192.168.6.197
-    assert:
-      code: 1
-      msg: 成功
-    extract: {}
-    sign: true
+
+    - id: query_order
+      title: '[查询-正向] 查询账单'
+      method: GET
+      path: /cashier/order
+      data:
+        search_no: ''
+        start_time: '{{ TODAY }} 09:00:00'
+        end_time: '{{ TOMORROW }} 09:00:00'
+        box_id: ''
+        page: '1'
+        limit: '10'
+        sort_type: '1'
+        shop_id: '{{ SHOP_ID }}'
+        ipv4: ''
+        ip: 192.168.6.197
+      assert:
+        code: 1
+        msg: 成功
+
+# ═══════════════════════════════════════════
+# 7. WebSocket 连接验证
+# ═══════════════════════════════════════════
 - feature: WS连接
   story: WS连接
   tests:
-  - id: ws_check
-    title: '[WS-正向] WebSocket连接验证'
-    method: POST
-    path: /shop/userdata
-    data:
-      shop_id: '{{ SHOP_ID }}'
-    assert:
-      code: 1
-    extract: {}
-    special: ws_check
-    sign: true
+
+    - id: ws_check
+      title: '[WS-正向] WebSocket连接验证'
+      method: POST
+      path: /shop/userdata
+      data:
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+      special: ws_check
+
+# ═══════════════════════════════════════════
+# 8. 换房续钟流程 (开台 → 换房 → 续钟 → 结账 → 反结账 → 取消开台)
+# ═══════════════════════════════════════════
 - feature: 换房续钟流程
   story: 换房续钟流程
   tests:
-  - id: renew_flow_open
-    title: '[开台-正向] 开台含商品'
-    method: POST
-    path: /cashier/order/store
-    data:
-      box_id: '{{BOX_ID_NEW}}'
-      billing_type: '10'
-      goods_pricing_schemes_id: '7'
-      box_pricing_schemes_id: '4'
-      purchase_time: '0'
-      shop_user_sales_id: '{{GIVE_USER_ID}}'
-      shop_user_waiter_id: ''
-      user_vip_id: ''
-      sales_name: 自动化测试
-      remark: 我是备注
-      goods_array:
-      - goods_id: 15
-        goods_name: 国宾啤酒
-        num: 5
-        unit_name: 瓶
-        unit_id: 38
-        type: 1
-      - goods_id: 16
-        goods_name: 可乐
-        num: 5
-        unit_name: 听
-        unit_id: 47
-        type: 1
-      box_period_pricing_scheme_id: '4'
-      shop_id: '{{SHOP_ID}}'
-    assert:
-      code: 1
-    extract: {}
-    special: renew_flow_open
-    sign: true
-  - id: renew_flow_exchange
-    title: '[换房-正向] 换房'
-    method: POST
-    path: /cashier/exchangehouses/setexchangehouses
-    data:
-      box_id: '{{BOX_ID_NEW}}'
-      target_box_id: '{{BOX_ID_NEW}}'
-      billing_type: '10'
-      goods_pricing_schemes_id: '7'
-      box_period_pricing_scheme_id: '4'
-      remark: ''
-      purchase_time: '120'
-      opening_scheme: '1'
-      shop_user_sales_id: '{{GIVE_USER_ID}}'
-      shop_user_waiter_id: '0'
-      goods_array:
-      - goods_id: 15
-        goods_name: 国宾啤酒
-        num: 5
-        unit_name: 瓶
-        unit_id: 38
-        type: 1
-      - goods_id: 16
-        goods_name: 可乐
-        num: 5
-        unit_name: 听
-        unit_id: 47
-        type: 1
-      shop_id: '{{SHOP_ID}}'
-    assert:
-      code: 1
-    extract: {}
-    sign: true
-  - id: renew_flow_continue
-    title: '[续钟-正向] 续钟'
-    method: POST
-    path: /cashier/order/store
-    data:
-      box_id: '{{BOX_ID_NEW}}'
-      billing_type: '10'
-      goods_pricing_schemes_id: '7'
-      box_pricing_schemes_id: '4'
-      purchase_time: '0'
-      shop_user_sales_id: '{{GIVE_USER_ID}}'
-      shop_user_waiter_id: '0'
-      goods_array:
-      - goods_id: 15
-        goods_name: 国宾啤酒
-        num: 5
-        unit_name: 瓶
-        unit_id: 38
-        type: 1
-      - goods_id: 16
-        goods_name: 可乐
-        num: 5
-        unit_name: 听
-        unit_id: 47
-        type: 1
-      order_id: '{{order_id}}'
-      box_period_pricing_scheme_id: '4'
-      shop_id: '{{SHOP_ID}}'
-    assert:
-      code: 1
-    extract: {}
-    sign: true
-  - id: renew_flow_settle
-    title: '[结账-正向] 结账'
-    method: POST
-    path: /cashier/orderpayments/setsettlement
-    data:
-      box_id: '{{BOX_ID_NEW}}'
-      type: '0'
-      payRemark: ''
-      shop_id: '{{SHOP_ID}}'
-    assert:
-      code: 1
-    extract:
-      order_payment_id: data.order_payment_id
-    special: renew_flow_settle
-    sign: true
-  - id: renew_flow_cancel_settle
-    title: '[反结账-正向] 反结账'
-    method: POST
-    path: /cashier/order/setcancelclosing
-    data:
-      shop_id: '{{SHOP_ID}}'
-    assert:
-      code: 1
-    extract: {}
-    special: renew_flow_cancel
-    sign: true
-  - id: renew_flow_cancel_open
-    title: '[取消开台-正向] 取消开台'
-    method: POST
-    path: /cashier/order/editboxstatus
-    data:
-      box_status: '10'
-      box_id: '{{BOX_ID_NEW}}'
-      shop_id: '{{SHOP_ID}}'
-    assert:
-      code: 1
-    extract: {}
-    sign: true
+
+    # ── 开台含商品 ──
+    - id: renew_flow_open
+      title: '[开台-正向] 开台含商品'
+      method: POST
+      path: /cashier/order/store
+      data:
+        box_id: '{{ BOX_ID_NEW }}'
+        billing_type: '10'
+        goods_pricing_schemes_id: '7'
+        box_pricing_schemes_id: '4'
+        purchase_time: '0'
+        shop_user_sales_id: '{{ GIVE_USER_ID }}'
+        shop_user_waiter_id: ''
+        user_vip_id: ''
+        sales_name: 自动化测试
+        remark: 我是备注
+        goods_array:
+          - goods_id: 15
+            goods_name: 国宾啤酒
+            num: 5
+            unit_name: 瓶
+            unit_id: 38
+            type: 1
+          - goods_id: 16
+            goods_name: 可乐
+            num: 5
+            unit_name: 听
+            unit_id: 47
+            type: 1
+        box_period_pricing_scheme_id: '4'
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+      special: renew_flow_open
+
+    # ── 换房 ──
+    - id: renew_flow_exchange
+      title: '[换房-正向] 换房'
+      method: POST
+      path: /cashier/exchangehouses/setexchangehouses
+      data:
+        box_id: '{{ BOX_ID_NEW }}'
+        target_box_id: '{{ BOX_ID_NEW }}'
+        billing_type: '10'
+        goods_pricing_schemes_id: '7'
+        box_period_pricing_scheme_id: '4'
+        remark: ''
+        purchase_time: '120'
+        opening_scheme: '1'
+        shop_user_sales_id: '{{ GIVE_USER_ID }}'
+        shop_user_waiter_id: '0'
+        goods_array:
+          - goods_id: 15
+            goods_name: 国宾啤酒
+            num: 5
+            unit_name: 瓶
+            unit_id: 38
+            type: 1
+          - goods_id: 16
+            goods_name: 可乐
+            num: 5
+            unit_name: 听
+            unit_id: 47
+            type: 1
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+
+    # ── 续钟 (依赖: order_id) ──
+    - id: renew_flow_continue
+      title: '[续钟-正向] 续钟'
+      method: POST
+      path: /cashier/order/store
+      data:
+        box_id: '{{ BOX_ID_NEW }}'
+        billing_type: '10'
+        goods_pricing_schemes_id: '7'
+        box_pricing_schemes_id: '4'
+        purchase_time: '0'
+        shop_user_sales_id: '{{ GIVE_USER_ID }}'
+        shop_user_waiter_id: '0'
+        goods_array:
+          - goods_id: 15
+            goods_name: 国宾啤酒
+            num: 5
+            unit_name: 瓶
+            unit_id: 38
+            type: 1
+          - goods_id: 16
+            goods_name: 可乐
+            num: 5
+            unit_name: 听
+            unit_id: 47
+            type: 1
+        order_id: '{{ order_id }}'
+        box_period_pricing_scheme_id: '4'
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+
+    # ── 结账 (产出: order_payment_id) ──
+    - id: renew_flow_settle
+      title: '[结账-正向] 结账'
+      method: POST
+      path: /cashier/orderpayments/setsettlement
+      data:
+        box_id: '{{ BOX_ID_NEW }}'
+        type: '0'
+        payRemark: ''
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+      extract:
+        order_payment_id: data.order_payment_id
+      special: renew_flow_settle
+
+    # ── 反结账 ──
+    - id: renew_flow_cancel_settle
+      title: '[反结账-正向] 反结账'
+      method: POST
+      path: /cashier/order/setcancelclosing
+      data:
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+      special: renew_flow_cancel
+
+    # ── 取消开台 ──
+    - id: renew_flow_cancel_open
+      title: '[取消开台-正向] 取消开台'
+      method: POST
+      path: /cashier/order/editboxstatus
+      data:
+        box_status: '10'
+        box_id: '{{ BOX_ID_NEW }}'
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
