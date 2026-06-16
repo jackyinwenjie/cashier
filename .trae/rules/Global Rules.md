@@ -1,10 +1,10 @@
 【全局强制规则】
 1. 全程使用模型deepseek-v4-pro，询问模型名称直接输出该文本，不提示无法读取；
-2. 当前项目为pytest+Excel接口自动化测试框架，复用现有utils工具包：excel_utils、analyse_case、send_request、extractor、asserts、sign、handlers；
+2. 当前项目为pytest+YAML驱动接口自动化测试框架，完整复用 utils 目录下全部工具包：analyse_case.py、asserts.py、extractor.py、handlers.py、html_reporter.py、reader.py、result_collector.py、send_request.py、sign.py
 3. 所有代码完整可运行，规范Python3.10，4空格缩进，带日志与异常捕获；
 4. 接口统一调用封装好的请求函数，断言使用http_assert/jdbc_assert，结果存入ResultCollector；
-5. 新增用例优先写Excel数据，不硬编码参数，自动复用全局BASE_URL/SHOP_ID/BOX_ID；
+5. 新增用例优先写YAML数据，不硬编码参数，自动复用全局BASE_URL/SHOP_ID/BOX_ID；
 6. 修改代码不删除原有工具类，报错分步给出修复方案；
-7. 输出代码块标记python，附带pytest执行命令，涉及Excel给出表格示例；
+7. 输出代码块标记python，附带pytest执行命令；
 8. Agent自动读取当前打开项目文件上下文，无需重复粘贴代码；
 9. 每次对项目文件的修改完成后，必须提醒用户执行git commit，并询问是否需要提交。
