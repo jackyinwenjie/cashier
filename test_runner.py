@@ -1,15 +1,15 @@
 """
-收银3.0收银台 - Excel 数据驱动测试框架
-├── test_data.xlsx   ← 📋 用例数据（新增用例只需加一行）
-├── test_runner.py   ← 🚀 测试执行器（无需改代码）
-└── utils/           ← 🔧 工具模块
-    ├── excel_utils   - 读取 Excel
-    ├── analyse_case  - Jinja2 渲染 + 解析
-    ├── send_request  - HTTP 请求发送
-    ├── extractor     - JSON 响应提取
-    ├── asserts       - 断言检查
-    ├── sign          - 签名工具
-    └── handlers      - 特殊动作（WebSocket / 动态参数）
+收银3.0收银台 - YAML 数据驱动测试框架
+├── test_data.yaml  ← 📋 用例数据
+├── test_runner.py  ← 🚀 测试执行器
+└── utils/          ← 🔧 工具模块
+    ├── reader       - 读取 YAML 用例
+    ├── analyse_case - Jinja2 渲染 + 解析
+    ├── send_request - HTTP 请求发送
+    ├── extractor    - JSON 响应提取
+    ├── asserts      - 断言检查
+    ├── sign         - 签名工具
+    └── handlers     - 特殊动作（WebSocket / 动态参数）
 """
 import json
 import logging
