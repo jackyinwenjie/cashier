@@ -1,0 +1,17 @@
+# ============================================================
+# 7. WebSocket 连接验证
+# ============================================================
+
+- feature: WS连接
+  story: WS连接
+  tests:
+
+    - id: ws_check
+      title: '[WS-正向] WebSocket连接验证'
+      method: POST
+      path: /shop/userdata
+      data:
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+      special: ws_check

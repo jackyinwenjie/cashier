@@ -1,0 +1,29 @@
+# ============================================================
+# 1. 基础数据
+# ============================================================
+
+- feature: 基础数据
+  story: 基础数据
+  tests:
+
+    - id: userdata
+      title: '[用户-正向] 获取收银员信息'
+      method: GET
+      path: /shop/userdata
+      data:
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        data.id: exists
+        data.name: exists
+        data.account: exists
+        data.cashier_version: exists
+
+    - id: shop_datalist
+      title: '[店铺-正向] 获取店铺数据列表'
+      method: GET
+      path: /shop/shop/datalist
+      data:
+        shop_id: '3226'
+      assert:
+        code: 1

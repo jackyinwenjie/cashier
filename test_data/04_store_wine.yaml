@@ -1,0 +1,65 @@
+# ============================================================
+# 3. 寄存支取 (寄存 → 查询 → 支取)
+# ============================================================
+
+- feature: 寄存支取
+  story: 寄存支取
+  tests:
+
+    # ── 寄存酒水 (产出: storing_wine_id) ──
+    - id: store_wine
+      title: '[寄存-正向] 寄存酒水'
+      method: POST
+      path: /cashier/storingwines/store
+      data:
+        user_type: '1'
+        name: 自动化
+        phone: '{{ USER_PHONE }}'
+        day: '30'
+        remark: ''
+        shop_user_id: ''
+        client_user_id: ''
+        box_id: '{{ STORING_BOX_ID }}'
+        goods_array:
+          - goods_id: '16'
+            num: '2'
+            unit_id: '1'
+            unit_num: '0'
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        data: not_null
+      extract:
+        storing_wine_id: data.storing_wine_id
+        deposit_data: data.deposit
+        deposit_goods_id: data.deposit.[0].goods_id
+        deposit_goods_num: data.deposit.[0].num
+
+    # ── 查询寄存明细 (依赖: storing_wine_id) ──
+    - id: query_store_detail
+      title: '[查询寄存-正向] 查询寄存明细'
+      method: GET
+      path: /cashier/storingwines/index
+      data:
+        storing_wines_id: '{{ storing_wine_id }}'
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+      special: storing_query_extract
+
+    # ── 支取酒水 (依赖: storing_wine_id) ──
+    - id: take_wine
+      title: '[支取-正向] 支取酒水'
+      method: POST
+      path: /cashier/storingwines/takewine
+      data:
+        storing_wines_id: '{{ storing_wine_id }}'
+        box_id: '{{ BOX_ID }}'
+        wine_shop_id: '{{ SHOP_ID }}'
+        takeWineBatch: '1'
+        remark: ''
+        is_custom: '2'
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+      special: take_wine_param

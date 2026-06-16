@@ -1,0 +1,51 @@
+# ============================================================
+# 4. 预订取消 (预订 → 查询 → 取消)
+# ============================================================
+
+- feature: 预订取消
+  story: 预订取消
+  tests:
+
+    # ── 预订包厢 ──
+    - id: reserve
+      title: '[预订-正向] 预订包厢'
+      method: POST
+      path: /cashier/reserve/store
+      data:
+        box_id: '{{ RESERVE_BOX_ID }}'
+        name: 自动化预订
+        phone: '{{ USER_PHONE }}'
+        shop_user_id: '{{ GIVE_USER_ID }}'
+        sales_name: 自动化测试
+        sex: '1'
+        remark: ''
+        type: '1'
+        vod_theme_id: ''
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        msg: 成功
+      special: reserve_param
+
+    # ── 查询预订 (产出: reserve_id) ──
+    - id: query_reserve
+      title: '[查询预订-正向] 查询预订获取 ID'
+      method: GET
+      path: /cashier/reserve/index
+      data:
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+      special: reserve_query_extract
+
+    # ── 取消预订 (依赖: reserve_id) ──
+    - id: cancel_reserve
+      title: '[取消预订-正向] 取消预订'
+      method: POST
+      path: /cashier/reserve/del
+      data:
+        id: '{{ reserve_id }}'
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        msg: 成功

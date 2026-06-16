@@ -1,0 +1,26 @@
+# ============================================================
+# 6. 账单查询
+# ============================================================
+
+- feature: 账单查询
+  story: 账单查询
+  tests:
+
+    - id: query_order
+      title: '[查询-正向] 查询账单'
+      method: GET
+      path: /cashier/order
+      data:
+        search_no: ''
+        start_time: '{{ TODAY }} 09:00:00'
+        end_time: '{{ TOMORROW }} 09:00:00'
+        box_id: ''
+        page: '1'
+        limit: '10'
+        sort_type: '1'
+        shop_id: '{{ SHOP_ID }}'
+        ipv4: ''
+        ip: 192.168.6.197
+      assert:
+        code: 1
+        msg: 成功

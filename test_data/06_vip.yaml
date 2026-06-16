@@ -1,0 +1,45 @@
+# ============================================================
+# 5. 会员充值扣款
+# ============================================================
+
+- feature: 会员充值扣款
+  story: 会员充值扣款
+  tests:
+
+    - id: vip_recharge
+      title: '[充值-正向] 会员充值'
+      method: POST
+      path: /cashier/user/vip/recharge
+      data:
+        money: '1000'
+        id: '{{ VIP_ID }}'
+        type: '1'
+        gift: '1000'
+        pay_ways:
+          - id: '37'
+            money: '1000'
+            type: '3'
+            type_pay: '2'
+        php_shop_user_id: ''
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+
+    - id: vip_deduction
+      title: '[扣款-正向] 会员扣款'
+      method: POST
+      path: /cashier/user/vip/deduction
+      data:
+        money: '1000'
+        gift: '1000'
+        remark: 自动化扣款
+        id: '{{ VIP_ID }}'
+        pay_ways:
+          - id: '37'
+            money: '1000'
+            type: '3'
+            type_pay: '2'
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        msg: 成功
