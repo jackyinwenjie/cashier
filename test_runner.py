@@ -26,7 +26,7 @@ logging.basicConfig(
 
 from utils.asserts import http_assert, jdbc_assert
 from utils.analyse_case import analyse_case
-from utils.excel_utils import read_excel
+from utils.reader import read_cases
 from utils.extractor import json_extractor
 from utils.send_request import send_http_request, send_http_request_raw
 from utils.handlers import (
@@ -35,7 +35,7 @@ from utils.handlers import (
 from utils.result_collector import ResultCollector, TestResult
 
 # 读取测试用例（模块级，确保 IDE 测试发现能解析）
-_test_cases = read_excel()
+_test_cases = read_cases()
 
 # ══════════════════════════════════════════════════════════
 # 全局配置（注入 context_template 供 Jinja2 模板使用）
