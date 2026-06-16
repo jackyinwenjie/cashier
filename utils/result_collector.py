@@ -47,7 +47,7 @@ class ResultCollector:
             "passed": passed,
             "failed": failed,
             "duration": round(time.time() - cls._start_time, 2),
-            "pass_rate": f"{passed / total * 100:.1f}%" if total else "N/A",
+            "pass_rate": f"{passed / total * 100:.1f}%" if total else "无",
         }
 
     @classmethod

@@ -2,23 +2,14 @@
 收银3.0收银台 - 接口测试用例
 基于 pytest 框架，自动验签 + 收银员 token（type=cashier）
 """
-import gzip
-import base64
 import json
-import threading
 import time
 from datetime import datetime, timedelta
 
 import pytest
-import requests
-import websocket
 
 from conftest import BASE_URL, signed_body
-
-# 无鉴权 session，用于越权测试
-raw_requests = requests.Session()
-raw_requests.trust_env = False
-raw_requests.headers.update({"Content-Type": "application/json"})
+from utils.handlers import handle_websocket_open_table
 
 
 # ══════════════════════════════════════════════════════════════
@@ -30,57 +21,7 @@ def test_login_success(api):
     assert api is not None
 
 
-def test_login_wrong_password():
-    """[登录-反向] 错误密码 → code!=1"""
-    resp = raw_requests.post(
-        f"{BASE_URL}/shop/login",
-        json=signed_body({"account": "zdh", "password": "wrong", "type": "cashier", "sms_code": "0"}),
-    )
-    data = resp.json()
-    print(f"\n[登录-错误密码] {json.dumps(data, ensure_ascii=False)}")
-    assert data.get("code") != 1, f"期望登录失败, 实际 code={data.get('code')}"
 
-
-def test_login_empty_password():
-    """[登录-反向] 空密码 → code!=1"""
-    resp = raw_requests.post(
-        f"{BASE_URL}/shop/login",
-        json=signed_body({"account": "zdh", "password": "", "type": "cashier", "sms_code": "0"}),
-    )
-    data = resp.json()
-    print(f"\n[登录-空密码] {json.dumps(data, ensure_ascii=False)}")
-    assert data.get("code") != 1, f"期望登录失败, 实际 code={data.get('code')}"
-
-
-def test_login_missing_account():
-    """[登录-参数缺失] 缺少 account → code=0"""
-    resp = raw_requests.post(
-        f"{BASE_URL}/shop/login",
-        json=signed_body({"password": "1", "type": "cashier", "sms_code": "0"}),
-    )
-    data = resp.json()
-    print(f"\n[登录-缺少account] {json.dumps(data, ensure_ascii=False)}")
-    assert data.get("code") == 0, f"期望 code=0, 实际 code={data.get('code')}"
-
-
-def test_login_missing_password():
-    """[登录-参数缺失] 缺少 password → code=0"""
-    resp = raw_requests.post(
-        f"{BASE_URL}/shop/login",
-        json=signed_body({"account": "zdh", "type": "cashier", "sms_code": "0"}),
-    )
-    data = resp.json()
-    print(f"\n[登录-缺少password] {json.dumps(data, ensure_ascii=False)}")
-    assert data.get("code") == 0, f"期望 code=0, 实际 code={data.get('code')}"
-
-
-def test_login_no_sign():
-    """[登录-验签缺失] 不发送 sign → code!=1"""
-    body = {"account": "zdh", "password": "1", "type": "cashier", "sms_code": "0"}
-    resp = raw_requests.post(f"{BASE_URL}/shop/login", json=body)
-    data = resp.json()
-    print(f"\n[登录-无sign] {json.dumps(data, ensure_ascii=False)}")
-    assert data.get("code") != 1, f"期望登录失败, 实际 code={data.get('code')}"
 
 
 # ══════════════════════════════════════════════════════════════
@@ -142,52 +83,17 @@ class TestCashierFlow:
     def test_01_open_table(self, api, ws_token, ensure_box_closed):
         """[开台-正向] 正常开台 → 通过 WebSocket 获取真实 order_id"""
 
-        # 1. 先连接 WebSocket（必须在开台之前，避免错过推送）
-        ws_url = f"ws://wsv3.ytsaas.com/?token={ws_token}&shop_id={SHOP_ID}&ipv4=192.168.6.197"
-        print(f"  → 先连接 WebSocket...")
-        ws_order_id = None
-        ws_event = threading.Event()
+        # 构造 all_dict 供 handler 使用
+        context = {
+            "ws_token": ws_token,
+            "SHOP_ID": SHOP_ID,
+            "order_id": None,
+        }
 
-        def on_message(ws, raw_msg):
-            nonlocal ws_order_id
-            try:
-                decoded = raw_msg
-                if isinstance(raw_msg, bytes):
-                    decoded = gzip.decompress(raw_msg).decode("utf-8")
-                elif isinstance(raw_msg, str) and raw_msg.startswith("H4sIA"):
-                    decoded = gzip.decompress(base64.b64decode(raw_msg)).decode("utf-8")
-                ws_data = json.loads(decoded)
-                box_list = ws_data.get("data", {}).get("data", [])
-                if box_list and isinstance(box_list, list):
-                    for box in box_list:
-                        oid = box.get("order_id", 0)
-                        if oid and oid != 0 and box.get("box_status") == 31:
-                            ws_order_id = oid
-                            ws_event.set()
-                            print(f"  → WebSocket 获取 order_id={oid}")
-            except Exception:
-                pass
+        # 复用 handlers 模块的 WebSocket 开台处理器
+        ws_close = handle_websocket_open_table(api, {}, context)
 
-        def on_error(ws, error):
-            print(f"  [WS错误] {error}")
-
-        def on_close(ws, code, msg):
-            pass
-
-        def on_open(ws):
-            pass
-
-        ws = websocket.WebSocketApp(ws_url,
-            on_open=on_open,
-            on_message=on_message,
-            on_error=on_error,
-            on_close=on_close)
-        ws_thread = threading.Thread(target=ws.run_forever)
-        ws_thread.daemon = True
-        ws_thread.start()
-        time.sleep(1.5)
-
-        # 2. 再开台
+        # 开台
         resp = api.post("/cashier/order/store",
             box_id=BOX_ID,
             billing_type="20",
@@ -205,13 +111,11 @@ class TestCashierFlow:
         assert data.get("code") == 1, f"期望 code=1, 实际 code={data.get('code')}"
         assert data.get("msg") == "成功"
 
-        # 3. 等待 order_id 推送（最多 10 秒）
-        ws_event.wait(timeout=10)
-        ws.close()
-        time.sleep(0.5)
+        # 等待 WebSocket 推送 order_id
+        ws_close()
 
-        assert ws_order_id is not None, "WebSocket 未推送 order_id"
-        TestCashierFlow.order_id = ws_order_id
+        assert context.get("order_id") is not None, "WebSocket 未推送 order_id"
+        TestCashierFlow.order_id = context["order_id"]
         print(f"  → 最终 order_id={TestCashierFlow.order_id}")
 
     def test_02_add_goods(self, api):

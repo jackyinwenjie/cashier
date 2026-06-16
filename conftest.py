@@ -2,53 +2,25 @@
 收银3.0收银台 - 框架核心
 pytest 全局配置和 fixtures，自动处理验签和登录（收银员类型）。
 """
-import hashlib
 import logging
-import time
-from typing import Any
+import os
 
 import pytest
 import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from utils.result_collector import ResultCollector
 from utils.html_reporter import generate_html
+from utils.sign import SIGN_KEY, make_sign as sign, signed_body
 
 # ========== 全局配置 ==========
-BASE_URL = "https://api-v3.ytsaas.com"
-SIGN_KEY = "JOqA4dzZDych2oaTPsJksryVeahpbHWa"
+BASE_URL = os.getenv("BASE_URL", "https://api-v3.ytsaas.com")
 
 # 收银员登录凭证
-LOGIN_ACCOUNT = "zdh"
-LOGIN_PASSWORD = "1"
-
-
-# ========== 签名工具 ==========
-def sign(params: dict[str, Any]) -> str:
-    """生成验签 SHA1 签名"""
-    filtered = {}
-    for k, v in params.items():
-        if isinstance(v, (list, dict)):
-            continue
-        if v is None:
-            filtered[k] = ''
-        elif isinstance(v, str):
-            filtered[k] = v.strip()
-        else:
-            filtered[k] = v
-
-    sorted_keys = sorted(filtered.keys())
-    param_str = ''.join(f"{k}={filtered[k]}&" for k in sorted_keys)
-    param_str = param_str.strip('&')
-    sign_str = f"{param_str}&key={SIGN_KEY}"
-    return hashlib.sha1(sign_str.encode("utf-8")).hexdigest().lower()
-
-
-def signed_body(params: dict[str, Any]) -> dict[str, Any]:
-    """给参数字典加上 time 和 sign"""
-    body = dict(params)
-    body["time"] = int(time.time() * 1000)
-    body["sign"] = sign(body)
-    return body
+LOGIN_ACCOUNT = os.getenv("LOGIN_ACCOUNT", "zdh")
+LOGIN_PASSWORD = os.getenv("LOGIN_PASSWORD", "1")
 
 
 # ========== Fixtures ==========

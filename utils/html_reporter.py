@@ -5,6 +5,8 @@ from datetime import datetime
 
 from .result_collector import ResultCollector, TestResult
 
+_STATUS_LABEL = {"PASS": "通过", "FAIL": "失败"}
+
 
 # ── CSS 样式（内联，无外部依赖）──
 _CSS = """
@@ -88,6 +90,7 @@ def generate_html(output_path: str = None) -> str:
     rows = []
     for i, r in enumerate(results):
         status_cls = "pass" if r.status == "PASS" else "fail"
+        status_label = _STATUS_LABEL.get(r.status, r.status)
         duration_str = f"{r.duration:.2f}s" if r.duration > 0 else "-"
 
         if r.status == "FAIL":
@@ -101,7 +104,7 @@ def generate_html(output_path: str = None) -> str:
                 <td>{i + 1}</td>
                 <td><span class="feature-tag">{r.feature or '-'}</span></td>
                 <td>{r.title or r.case_id}</td>
-                <td><span class="status {status_cls}">{r.status}</span></td>
+                <td><span class="status {status_cls}">{status_label}</span></td>
                 <td class="time-cell">{duration_str}</td>
                 <td>
                     <span class="error-msg" title="{r.error_msg}">{error_display}</span>
@@ -124,7 +127,7 @@ def generate_html(output_path: str = None) -> str:
                 <td>{i + 1}</td>
                 <td><span class="feature-tag">{r.feature or '-'}</span></td>
                 <td>{r.title or r.case_id}</td>
-                <td><span class="status {status_cls}">{r.status}</span></td>
+                <td><span class="status {status_cls}">{status_label}</span></td>
                 <td class="time-cell">{duration_str}</td>
                 <td>-</td>
             </tr>""")
@@ -187,7 +190,7 @@ def generate_html(output_path: str = None) -> str:
         </tbody>
     </table>
 
-    <div class="footer">收银3.0收银台 · AutoTest Framework</div>
+    <div class="footer">收银3.0收银台 · 自动化测试框架</div>
 </div>
 <script>{_JS}</script>
 </body>

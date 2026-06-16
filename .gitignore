@@ -8,3 +8,4 @@ batch_storingwines_report.html
 *.egg-info/
 dist/
 build/
+.env

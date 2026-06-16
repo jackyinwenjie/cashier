@@ -18,34 +18,40 @@ from datetime import datetime, timedelta
 
 import pytest
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    datefmt="%H:%M:%S",
+)
+
 from utils.asserts import http_assert, jdbc_assert
 from utils.analyse_case import analyse_case
 from utils.excel_utils import read_excel
 from utils.extractor import json_extractor
 from utils.send_request import send_http_request, send_http_request_raw
 from utils.handlers import (
-    WS_SPECIALS, HANDLER_PRE, HANDLER_SETTLE, HANDLER_POST,
-    handle_websocket_open_table,
+    WS_SPECIALS, WS_HANDLERS, HANDLER_PRE, HANDLER_SETTLE, HANDLER_POST,
 )
 from utils.result_collector import ResultCollector, TestResult
 
+# 读取测试用例（模块级，确保 IDE 测试发现能解析）
+_test_cases = read_excel()
+
 # ══════════════════════════════════════════════════════════
-# 全局配置（注入 all_dict 供 Jinja2 模板使用）
+# 全局配置（注入 context_template 供 Jinja2 模板使用）
 # ══════════════════════════════════════════════════════════
 
 class TestRunner:
     """Excel 驱动测试运行器：读 Excel → 渲染 → 发送 → 断言 → 提取"""
 
-    # 读取测试用例文件中的全部数据
-    data = read_excel()
-
-    # 全局变量存储（提取后的数据跨用例共享）
+    # 全局上下文（可变，跨用例共享动态提取值如 order_id / storing_wine_id）
     today = datetime.now().strftime("%Y-%m-%d")
     tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-    all = {
+    context = {
         "BASE_URL":       "https://api-v3.ytsaas.com",
         "SHOP_ID":        "3226",
         "BOX_ID":         "64291",
+        "BOX_ID_NEW":     "64545",
         "STORING_BOX_ID": "64399",
         "RESERVE_BOX_ID": "64398",
         "VIP_ID":         "4",
@@ -57,7 +63,7 @@ class TestRunner:
         "TOMORROW":       tomorrow,
     }
 
-    @pytest.mark.parametrize("case", data)
+    @pytest.mark.parametrize("case", _test_cases)
     def test_case(self, client, ws_token, case):
         """核心用例执行流程"""
 
@@ -67,8 +73,8 @@ class TestRunner:
         case_story = case.get("story", "")
         t_start = time.time()
 
-        # 引用全局 all（建立类属性与实例的关联）
-        all_dict = TestRunner.all
+        # 引用全局上下文（用于跨用例共享动态提取值如 order_id）
+        all_dict = TestRunner.context
         # 注入 ws_token 供 WebSocket 处理使用
         all_dict["ws_token"] = ws_token
 
@@ -78,6 +84,7 @@ class TestRunner:
         logging.info(
             f"[{case_id}] "
             f"模块:{case_feature} "
+            +
             f"场景:{case_story} "
             f"标题:{case_title}"
         )
@@ -104,7 +111,7 @@ class TestRunner:
         try:
             # ══ 步骤 3: 特殊动作 — 请求前 ══
             if special in WS_SPECIALS:
-                ws_close = handle_websocket_open_table(client, case, all_dict)
+                ws_close = WS_HANDLERS[special](client, case, all_dict)
             elif special in HANDLER_PRE:
                 HANDLER_PRE[special](client, case, all_dict)
 
@@ -154,13 +161,13 @@ class TestRunner:
                 status="PASS",
                 duration=round(elapsed, 3),
             ))
-            logging.info(f"  ✅ [{case_id}] PASS ({elapsed:.2f}s)")
+            logging.info(f"  ✅ [{case_id}] 通过 ({elapsed:.2f}s)")
 
         except Exception as e:
             elapsed = time.time() - t_start
             error_text = str(e)
 
-            logging.error(f"  ❌ [{case_id}] FAIL ({elapsed:.2f}s): {error_text}")
+            logging.error(f"  ❌ [{case_id}] 失败 ({elapsed:.2f}s): {error_text}")
 
             # 记录失败详情
             ResultCollector.add(TestResult(

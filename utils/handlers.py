@@ -11,19 +11,26 @@ from datetime import datetime, timedelta
 
 import websocket
 
+from .sign import signed_body
+
 
 # ══════════════════════════════════════════════════════
-# WebSocket 开台 → 提取 order_id
+# WebSocket 工具
 # ══════════════════════════════════════════════════════
 
-def handle_websocket_open_table(client, case: dict, all_dict: dict):
-    """WebSocket 监听开台 → 需要 ws_token"""
-    ws_url = (
+def _build_ws_url(all_dict: dict) -> str:
+    """构建 WebSocket 连接 URL"""
+    return (
         f"ws://wsv3.ytsaas.com?"
         f"token={all_dict.get('ws_token', '')}"
         f"&shop_id={all_dict.get('SHOP_ID', '')}"
         f"&ipv4=192.168.6.197"
     )
+
+
+def handle_websocket_open_table(client, case: dict, all_dict: dict):
+    """WebSocket 监听开台 → 需要 ws_token"""
+    ws_url = _build_ws_url(all_dict)
     logging.info("  [WS] 连接中...")
 
     ws_order_id = None
@@ -58,7 +65,6 @@ def handle_websocket_open_table(client, case: dict, all_dict: dict):
     ws_thread.start()
     time.sleep(1.5)
 
-    # 返回关闭回调
     def wait_and_close():
         ws_event.wait(timeout=10)
         ws.close()
@@ -70,15 +76,50 @@ def handle_websocket_open_table(client, case: dict, all_dict: dict):
     return wait_and_close
 
 
+def handle_websocket_check(client, case: dict, all_dict: dict):
+    """WebSocket 连接检查 → 验证 on_open 回调是否触发"""
+    ws_url = _build_ws_url(all_dict)
+    logging.info("  [WS] 连接检查中...")
+
+    ws_opened = threading.Event()
+    ws_error_msgs = []
+
+    def on_open(ws):
+        ws_opened.set()
+        logging.info("  [WS] 连接成功")
+
+    def on_error(ws, error):
+        ws_error_msgs.append(str(error))
+        logging.warning(f"  [WS] 连接错误: {error}")
+
+    ws = websocket.WebSocketApp(ws_url,
+        on_open=on_open,
+        on_error=on_error,
+        on_message=lambda ws, msg: None,
+        on_close=lambda ws, c, m: None)
+    ws_thread = threading.Thread(target=ws.run_forever, daemon=True)
+    ws_thread.start()
+
+    def check_and_close():
+        opened = ws_opened.wait(timeout=10)
+        ws.close()
+        time.sleep(0.5)
+        assert opened, (
+            f"WebSocket 连接失败，未收到 on_open 回调"
+            + (f"（错误: {ws_error_msgs[0]}）" if ws_error_msgs else "")
+        )
+        all_dict["ws_connected"] = True
+        logging.info("  [WS] 连接检查通过")
+
+    return check_and_close
+
+
 # ══════════════════════════════════════════════════════
 # 请求前钩子（修改 all_dict 或返回额外参数）
 # ══════════════════════════════════════════════════════
 
 def _get_goodsorders(client, all_dict: dict):
     """通用：查询商品行列表"""
-    from .sign import signed_body
-    from .extractor import extract_by_path
-
     resp = client.get_explicit(
         f"{all_dict['BASE_URL']}/cashier/goodsorders/index",
         signed_body({
@@ -176,9 +217,6 @@ def settle_set_settlement_param(client, case: dict, all_dict: dict) -> dict:
 
 def pre_storing_query_extract(client, case: dict, all_dict: dict) -> dict:
     """查询寄存后提取明细 DB id"""
-    from .sign import signed_body
-    from .extractor import extract_by_path
-
     resp = client.get_explicit(
         f"{all_dict['BASE_URL']}/cashier/storingwines/index",
         signed_body({
@@ -246,9 +284,6 @@ def settle_reserve_param(client, case: dict, all_dict: dict) -> dict:
 
 def pre_reserve_query_extract(client, case: dict, all_dict: dict) -> dict:
     """查询预订后提取 max(id)"""
-    from .sign import signed_body
-    from .extractor import extract_by_path
-
     resp = client.get_explicit(
         f"{all_dict['BASE_URL']}/cashier/reserve/index",
         signed_body({"shop_id": all_dict["SHOP_ID"]})
@@ -264,22 +299,113 @@ def pre_reserve_query_extract(client, case: dict, all_dict: dict) -> dict:
 
 
 # ══════════════════════════════════════════════════════
+# 换房-续钟-结账-反结账-取消开台 流程
+# ══════════════════════════════════════════════════════
+
+def _ensure_box_cancelled(client, all_dict: dict):
+    """取消开台（box_status=10），确保包厢空闲"""
+    box_id = all_dict.get("BOX_ID_NEW", all_dict.get("BOX_ID"))
+    resp = client.post_explicit(
+        f"{all_dict['BASE_URL']}/cashier/order/editboxstatus",
+        signed_body({
+            "box_status": "10",
+            "box_id": box_id,
+            "shop_id": all_dict["SHOP_ID"],
+        })
+    )
+    data = resp.json()
+    logging.info(f"  → 取消开台(清理) code={data.get('code')}")
+
+
+def post_renew_flow_open(client, case: dict, all_dict: dict, response_data: dict):
+    """开台后查询 /cashier/order 获取 order_id"""
+    box_id = all_dict["BOX_ID_NEW"]
+    resp = client.get_explicit(
+        f"{all_dict['BASE_URL']}/cashier/order",
+        signed_body({
+            "search_no": "",
+            "start_time": f"{all_dict['TODAY']} 09:00:00",
+            "end_time": f"{all_dict['TOMORROW']} 09:00:00",
+            "box_id": box_id,
+            "page": "1",
+            "limit": "10",
+            "sort_type": "1",
+            "shop_id": all_dict["SHOP_ID"],
+            "ipv4": "",
+            "ip": "192.168.6.197",
+        })
+    )
+    data = resp.json()
+    assert data.get("code") == 1, f"查询账单失败: {data}"
+    items = data.get("data", {}).get("data", [])
+    assert items and len(items) > 0, f"未找到包厢 {box_id} 的订单"
+    order_id = items[0]["id"]
+    all_dict["order_id"] = order_id
+    logging.info(f"  → order_id={order_id}")
+
+
+def pre_renew_flow_settle(client, case: dict, all_dict: dict) -> dict:
+    """结账前：查询未付款商品行，计算应付总额"""
+    box_id = all_dict["BOX_ID_NEW"]
+    resp = client.get_explicit(
+        f"{all_dict['BASE_URL']}/cashier/goodsorders/index",
+        signed_body({
+            "order_id": all_dict["order_id"],
+            "shop_id": all_dict["SHOP_ID"],
+        })
+    )
+    data = resp.json()
+    assert data.get("code") == 1, f"查询商品行失败: {data}"
+    items = data.get("data", {}).get("goods_data", [])
+    assert len(items) > 0, "未返回商品行"
+    total = int(sum(
+        float(it["receivable_money"]) for it in items
+        if it.get("state") == 1 and float(it.get("money", 0)) > 0
+    ))
+    all_dict["_renew_settle_total"] = total
+    logging.info(f"  → 应付总额={total}")
+    return {}
+
+
+def settle_renew_flow_settle(client, case: dict, all_dict: dict) -> dict:
+    """结账：注入动态 payment_method"""
+    return {
+        "payment_method": [{
+            "id": 37,
+            "money": all_dict["_renew_settle_total"],
+            "type": 1,
+        }],
+    }
+
+
+def settle_renew_flow_cancel(client, case: dict, all_dict: dict) -> dict:
+    """反结账：注入动态 order_payment_id"""
+    return {"order_payment_id": all_dict["order_payment_id"]}
+
+
+# ══════════════════════════════════════════════════════
 # 处理器注册表
 # ══════════════════════════════════════════════════════
 
-# 需要 WebSocket 的 special
-WS_SPECIALS = {"websocket_open_table"}
+# WebSocket 处理器映射表（special → handler）
+WS_HANDLERS = {
+    "websocket_open_table": handle_websocket_open_table,
+    "ws_check":             handle_websocket_check,
+}
+WS_SPECIALS = set(WS_HANDLERS.keys())
 
 # 三阶段处理：pre(请求前查询) → settle(合并额外参数) → post(请求后)
 HANDLER_PRE = {
-    "add_goods_extract":     pre_add_goods_extract,
-    "goods_refund_param":    pre_goods_refund_param,
-    "settlement_param":      pre_settlement_param,
-    "set_settlement_param":  pre_set_settlement_param,
-    "storing_query_extract": pre_storing_query_extract,
-    "take_wine_param":       pre_take_wine_param,
-    "reserve_param":         pre_reserve_param,
-    "reserve_query_extract": pre_reserve_query_extract,
+    "add_goods_extract":        pre_add_goods_extract,
+    "goods_refund_param":       pre_goods_refund_param,
+    "settlement_param":         pre_settlement_param,
+    "set_settlement_param":     pre_set_settlement_param,
+    "storing_query_extract":    pre_storing_query_extract,
+    "take_wine_param":          pre_take_wine_param,
+    "reserve_param":            pre_reserve_param,
+    "reserve_query_extract":    pre_reserve_query_extract,
+    "renew_flow_settle":        pre_renew_flow_settle,
+    "ensure_cancelled_box":     _ensure_box_cancelled,
 }
 
 HANDLER_SETTLE = {
@@ -288,8 +414,11 @@ HANDLER_SETTLE = {
     "set_settlement_param":  settle_set_settlement_param,
     "reserve_param":         settle_reserve_param,
     "take_wine_param":       settle_take_wine_param,
+    "renew_flow_settle":     settle_renew_flow_settle,
+    "renew_flow_cancel":     settle_renew_flow_cancel,
 }
 
 HANDLER_POST = {
     "add_goods_extract":     post_add_goods_extract,
+    "renew_flow_open":       post_renew_flow_open,
 }
