@@ -1,12 +1,14 @@
 __pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
 test_report.html
 batch_storingwines_report.html
 allure-results/
 allure-report/
 .vscode/
 .idea/
+.venv/
 *.egg-info/
 dist/
 build/
