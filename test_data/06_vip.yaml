@@ -1,5 +1,5 @@
 # ============================================================
-# 5. 会员充值扣款
+# 6. 会员充值→ 查询充值后余额→ 会员扣款→ 查询扣款后余额
 # ============================================================
 
 - feature: 会员充值扣款
@@ -25,6 +25,28 @@
       assert:
         code: 1
 
+    - id: vip_query_after_recharge
+      title: '[查询-验证] 充值后查询会员金额'
+      method: GET
+      path: /cashier/user/vip/index
+      data:
+        search: 自动测试
+        remove_status: '1'
+        search_shop_id: ''
+        field: ''
+        sort: ''
+        page: '1'
+        limit: '30'
+        total: '1'
+        shop_id: '{{ SHOP_ID }}'
+        ipv4: ''
+        ip: 192.168.6.197
+      assert:
+        code: 1
+        msg: 成功
+        data.data.[0].balance: '1000.00'
+        data.data.[0].gift_balance: '1000.00'
+
     - id: vip_deduction
       title: '[扣款-正向] 会员扣款'
       method: POST
@@ -43,3 +65,25 @@
       assert:
         code: 1
         msg: 成功
+
+    - id: vip_query_after_deduction
+      title: '[查询-验证] 扣款后查询会员金额'
+      method: GET
+      path: /cashier/user/vip/index
+      data:
+        search: 自动测试
+        remove_status: '1'
+        search_shop_id: ''
+        field: ''
+        sort: ''
+        page: '1'
+        limit: '30'
+        total: '1'
+        shop_id: '{{ SHOP_ID }}'
+        ipv4: ''
+        ip: 192.168.6.197
+      assert:
+        code: 1
+        msg: 成功
+        data.data.[0].balance: '0.00'
+        data.data.[0].gift_balance: '0.00'
