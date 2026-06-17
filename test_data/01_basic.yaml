@@ -27,3 +27,109 @@
         shop_id: '3226'
       assert:
         code: 1
+
+- feature: 系统配置
+  story: 包厢状态
+  tests:
+
+    - id: boxstatuscolor_index
+      title: '[配置-正向] 获取包厢状态颜色列表'
+      method: POST
+      path: /common/boxstatuscolor/index
+      data:
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        msg: 成功
+        data: not_null
+
+- feature: 系统配置
+  story: 菜单权限
+  tests:
+
+    - id: menuspurview
+      title: '[配置-正向] 获取菜单权限树'
+      method: POST
+      path: /shop/menuspurview
+      data:
+        shop_id: '{{ SHOP_ID }}'
+        category: '2'
+        terminal: '1'
+      assert:
+        code: 1
+        data.[0].id: exists
+        data.[0].name: exists
+        data.[0].children: exists
+
+- feature: 系统配置
+  story: 区域数据
+  tests:
+
+    - id: area_index
+      title: '[配置-正向] 获取区域列表'
+      method: POST
+      path: /common/area/index
+      data:
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        msg: 成功
+        data.data: not_null
+
+- feature: 系统配置
+  story: 包厢类型
+  tests:
+
+    - id: box_type_index
+      title: '[配置-正向] 获取包厢类型列表'
+      method: POST
+      path: /common/box/type/index
+      data:
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        msg: 成功
+        data: not_null
+
+- feature: 系统配置
+  story: 按钮配置
+  tests:
+
+    - id: cashier_button_detail
+      title: '[配置-正向] 获取收银台按钮配置'
+      method: POST
+      path: /cashier/cashier_button/detail
+      data:
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        msg: 成功
+        data.shop_id: '3226'
+        data.button_config: exists
+
+- feature: 系统配置
+  story: 测试工具
+  tests:
+
+    - id: test_network
+      title: '[测试-正向] 网络连通性测试'
+      method: POST
+      path: /cashier/saas_testing_tool/test_network
+      data:
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        msg: 成功
+
+    - id: overview
+      title: '[测试-正向] 系统概览'
+      method: POST
+      path: /cashier/saas_testing_tool/overview
+      data:
+        shop_id: '{{ SHOP_ID }}'
+      assert:
+        code: 1
+        msg: 成功
+        data.cashier: exists
+      extract:
+        login_number: data.cashier.login_number
